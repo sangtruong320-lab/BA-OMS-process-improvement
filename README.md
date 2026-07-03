@@ -85,3 +85,6 @@ A separate, earlier project in `/sql` and `/dashboard`: analysis of 700,000+ job
 ---
 
 ## Status
+This is a learning portfolio project, not a production system. Several business decisions are flagged as open in the SRS (tier validity rules, voucher behavior on downgrade, guest checkout) and intentionally left unresolved — they're the kind of question a real BA would take back to a stakeholder rather than guess at.
+
+Feedback welcome.
