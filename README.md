@@ -127,7 +127,7 @@ Three sources of stock, all going into the same warehouse, all needing to be tra
 A simple stock counter doesn't capture this. The solution is a ledger — every movement is a new row (sale, adjustment, transfer in, purchase in). The balance is always a `SUM()`. You can always trace why stock changed.
 
 Reservation sits on top of this: when an order is created, stock is reserved (locked) but not deducted. It's only deducted when payment confirms. If payment fails or times out at 15 minutes, the reservation releases automatically.
-```
+
 ![ERD Phase 3](Diagram/ER/ERD_Phase_3.png)
 
 ---
