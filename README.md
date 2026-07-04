@@ -1,30 +1,139 @@
-# OMS Project — X Technology
+# Order Management System — Company X
 
-End-to-end Business Analysis project: a phased Order Management System for a company that runs **two parallel business lines** — B2B power-plant equipment bidding and a new B2C retail channel built to liquidate leftover bid inventory.
-
-This repo documents the full BA process: problem discovery → process design → data modeling → system design → requirements documentation. It is not a finished product — it is a working record of how the requirements were built, including mistakes that were caught and corrected.
+**What this is:** A BA portfolio project documenting the requirements and system design for an OMS built for a company with an unusual inventory problem. Not a codebase. Not a finished product. A record of how the thinking was built — including the parts that were wrong the first time.
 
 ---
 
-## Business Context
+## The Problem
 
-X Technology supplies equipment for hydro and thermal power plant projects. Bidding requires buying components in bundles, which leaves usable leftover stock that doesn't sell at retail on its own. Over time this created idle inventory tying up capital. Management decided to launch an online retail channel to move that stock — running independently alongside the existing bidding business, without disrupting it.
+Company X bids on large equipment contracts for power plant construction. To complete a contract, they buy components in bundles. They use what they need. The rest sits in a warehouse.
 
-## Why This Project Has Phases
+Over time, three types of leftover inventory accumulated:
 
-The first version of this project jumped straight from "manual process" to "fully automated multi-vendor e-commerce platform with vouchers, loyalty tiers, and microservices." A mentor review caught the gap: that jump skips the part every real transformation actually requires — standardizing the process, cleaning the data, training the people — *before* software gets built.
+- Equipment left over from completed bids — usable, but doesn't sell as a standalone unit
+- Components they buy externally to complete a leftover unit into something sellable
+- Stock purchased directly to sell retail
 
-The project was restructured into phases to reflect that:
+None of this was being moved efficiently. Orders came in by phone and email. Inventory was tracked in Excel. Accounting reconciled everything by hand at month-end. No one outside the warehouse knew what stock existed or in what state.
 
-| Phase | Focus | Status |
+Management decided to build a retail sales channel — online, automated, running in parallel with the bidding business without disrupting it.
+
+---
+
+## Why This Isn't Just "Build an E-Commerce Site"
+
+The first version of this project did exactly that — jumped straight to a fully automated multi-vendor platform with vouchers, loyalty tiers, and microservices. A senior BA review stopped that.
+
+The actual problem wasn't "we need software." It was "we have a manual process with no documentation, inconsistent data, and staff who have never worked with a formal system." Software built on top of that breaks immediately.
+
+So the project was restructured into phases:
+
+| Phase | What actually happens | Output |
 |---|---|---|
-| **G1–G2** | Process standardization (SOP) + data cleanup, led by Accounting | Documented |
-| **Buffer** | Wait for business to hit growth threshold justifying investment | Documented |
-| **G3** | OMS MVP — retail ordering, MoMo + bank transfer, inventory ledger | Documented (this repo's main scope) |
-| **G4** | Future state — vouchers, loyalty, multi-seller, automated bank reconciliation | Idea only, not designed |
+| **G1–G2** | Standardize the process on paper first. Define SOPs. Clean and structure the data. Train staff on the new workflow — before any software exists. Accounting owns the data entry. | SOP document, clean dataset |
+| **Buffer** | Wait until the business hits a volume threshold that justifies the investment. The Director decides when. | Business decision |
+| **G3** | Build the OMS MVP. Scope is deliberately small. | **This repo's main scope** |
+| **G4** | Vouchers, loyalty tiers, multi-seller, automated bank reconciliation. When the retail channel is mature enough to need them. | Future state — sketched, not designed |
 
-G3 is a **monolith** by design — not microservices. That choice was also a correction: an earlier version mixed monolith data modeling with microservice-style sequence diagrams, which doesn't hold together. Architecture decisions should follow the team's actual stage, not the most impressive-sounding pattern.
+G3 is a **monolith**. Not because microservices are wrong, but because a small team at an early stage doesn't need the operational complexity. That was also a correction — an earlier version of this project modeled a monolith database while drawing microservice-style sequence diagrams. The two don't go together.
 
+---
+
+## What G3 Actually Does
+
+Five modules, one database, internal function calls between modules.
+
+```
+ORD   Order Management    Customer places order → system checks stock → 
+                          creates order → initiates payment
+                          
+PM    Payment             MoMo integration + manual bank transfer confirmation
+                          + daily automated reconciliation
+                          
+IVTR  Inventory           Ledger-based stock tracking (append-only, 3 stock sources)
+                          + reservation system
+                          
+CUS   Customer            Registration, login, order history, notifications
+
+ADM   Admin               Order management, stock management, reports, role-based access
+```
+
+---
+
+## The Payment Flow — End to End
+
+This is the part that has the most moving pieces, so it's worth walking through before looking at diagrams.
+
+**Happy path:**
+
+```
+1. Customer places order
+2. System checks stock (SELECT FOR UPDATE to prevent race condition)
+3. Stock reserved — not deducted yet
+4. Payment request sent to MoMo → customer gets payment URL
+5. Customer pays on MoMo
+6. MoMo sends IPN (server-to-server notification) to backend
+7. Backend validates IPN signature (HMAC)
+8. Backend checks: have we processed this IPN before? (idempotency)
+9. Backend checks: is payment already in a terminal state?
+10. Backend updates payment status → confirmed
+11. Stock reservation confirmed → deducted from ledger
+12. Customer notified → order confirmed
+13. Return HTTP 200 to MoMo
+```
+
+**What can go wrong, and how it's handled:**
+
+```
+Customer closes browser before redirect fires
+→ IPN arrives anyway via server-to-server
+→ IPN is source of truth, not the redirect
+
+MoMo sends the same IPN multiple times
+→ gateway_txn_ref checked against log before processing
+→ duplicate detected → return 200, stop
+
+IPN arrives out of order (failed IPN arrives after success IPN)
+→ timestamp comparison: if IPN is older than last update, discard
+→ terminal state protection: confirmed status cannot be overwritten
+
+IPN never arrives (network failure)
+→ backend polls MoMo after 5 minutes
+→ frontend polls order status every 3 seconds, timeout at 15 min
+
+Payment confirmed in DB but MoMo has no record
+→ caught by daily reconciliation job
+→ flagged as exception → accounting reviews manually
+```
+
+![Payment Sequence](Diagram/sequence/Sequence-Payment_Phase_3&4.png)
+![Sequence IPN Validation & Processing Phase 3 & 4](Diagram/sequence/Sequence-IPN_Validation_&_Processing_Phase_3&4.png)
+
+---
+
+## The Inventory Problem
+
+Three sources of stock, all going into the same warehouse, all needing to be tracked differently:
+
+- Bid leftovers (transferred in)
+- External purchases to complete a unit (purchased to supplement)
+- Direct retail purchases (purchased to sell)
+
+A simple stock counter doesn't capture this. The solution is a ledger — every movement is a new row (sale, adjustment, transfer in, purchase in). The balance is always a `SUM()`. You can always trace why stock changed.
+
+Reservation sits on top of this: when an order is created, stock is reserved (locked) but not deducted. It's only deducted when payment confirms. If payment fails or times out at 15 minutes, the reservation releases automatically.
+
+![ERD Phase 3](Diagram/ER/ERD_Phase_3.png)
+
+---
+
+## The Process Before Software
+
+This is what the workflow looked like before any of this existed. It's included because understanding what was broken is the actual starting point of the BA work — not the solution.
+
+![As-Is Process](Diagram/BPMN/BPMN_AS_IS_Phase_1.png)
+
+The problems weren't hard to find: orders came in by phone and email with no central record, inventory was checked by eye or Excel with no audit trail, communication between Sales and Warehouse happened by phone, and the whole process depended on a small number of people who carried institutional knowledge that didn't exist anywhere else.
 
 ---
 
@@ -54,37 +163,31 @@ G3 is a **monolith** by design — not microservices. That choice was also a cor
   /er            
     erd_phase4.png        Extended model (voucher, loyalty, multi-vendor) — G4 reference
     erd-phase3.png             Scoped-down model actually used for G3
+
+/sql
+  01-05_*.sql             SQL scripts from the DA project below
+
+/dashboard
+  powerbi_screenshot.png
 ```
 
 ---
 
-## Phase 3 — System Design Summary
+## Iterations
 
-**Architecture:** Monolith, 5 modules (`ORD`, `PM`, `IVTR`, `CUS`, `ADM`), single shared database, internal function calls — no API Gateway between modules.
-
-**Core design decisions and why they exist:**
-
-- **IPN as source of truth.** MoMo's redirect callback is UI-only; it never updates payment status. Only the server-to-server IPN does, because the customer can close the browser before redirect fires.
-- **Idempotency on every IPN.** MoMo can resend the same notification. Each one is checked against a `gateway_txn_ref` before any state change happens, so a retry never double-processes a payment.
-- **Terminal state protection.** Once a payment is `confirmed` or `cancelled`, no later IPN — even a legitimate one that arrives out of order — is allowed to overwrite it. Timestamp comparison catches stale, delayed IPNs.
-- **Two-phase locking on inventory.** Stock is reserved (not deducted) at checkout using `SELECT FOR UPDATE`, to prevent two customers from buying the last unit at the same moment. It's only deducted for real once payment is confirmed; otherwise it auto-releases after 15 minutes.
-- **Inventory Ledger, not a stock counter.** Every stock movement (sale, manual adjustment, incoming bid-leftover stock, incoming retail purchase) is an append-only row. The balance is a `SUM()`, not a field that gets directly updated — so there's always an audit trail of *why* stock changed.
-- **Snapshot pattern.** Order line items store the price at time of purchase, not a live reference to the product table, so historical orders stay accurate even after prices change.
-- **Reconciliation buffer window.** The daily MoMo reconciliation job skips transactions from the last hour, so a late-arriving IPN doesn't get falsely flagged as a discrepancy before it's had time to land.
-
-**What was deliberately left out of G3, and why:** shopping cart (direct order creation instead), vouchers, loyalty tiers, multi-seller splitting, automated bank reconciliation, refunds. These add real complexity that isn't justified until the retail channel has enough volume to need them — they're sketched in the v2 ERD as a forward reference, not designed in detail.
-
-**On "API" in a monolith context.** API does not mean HTTPS. Internal module calls (`PaymentModule.initiate()`, `InventoryModule.reserve()`) are also APIs — they just cross function boundaries, not network boundaries. The only HTTPS interfaces in G3 are external: Frontend → Backend, MoMo IPN → Backend, Backend → MoMo query API. Everything else is an internal call within the same process.
+Two major revision cycles after senior BA review — scope corrections (B2B/B2C separation), architecture alignment (monolith consistency throughout), transition phase gaps, and a reconciliation query logic fix. The current BRD, SRS, and ERD reflect those corrections.
 
 ---
 
 ## Related — Data Analytics Project
 
-A separate, earlier project in `/sql` and `/dashboard`: analysis of 700,000+ job postings (Luke Barousse dataset) using CTEs, window functions, and self-joins, visualized in a 5-page Power BI dashboard. Included here because it's part of the same portfolio, not because it's part of the OMS system design.
+A separate project: analysis of 700,000+ job postings using CTEs, window functions, LAG, ROW_NUMBER, and self-joins in PostgreSQL, visualized in a 5-page Power BI dashboard. In `/sql` and `/dashboard`. Different project, same repo.
 
 ---
 
 ## Status
-This is a learning portfolio project, not a production system. Several business decisions are flagged as open in the SRS (tier validity rules, voucher behavior on downgrade, guest checkout) and intentionally left unresolved — they're the kind of question a real BA would take back to a stakeholder rather than guess at.
+
+Portfolio project. Several business decisions in the SRS are flagged as open and left unresolved — guest checkout, tier validity calculation, voucher behavior on downgrade. These are the kind of questions a BA takes back to a stakeholder rather than deciding alone.
 
 Feedback welcome.
+
