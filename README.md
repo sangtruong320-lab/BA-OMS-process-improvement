@@ -85,6 +85,13 @@ This is the part that has the most moving pieces, so it's worth walking through 
 **What can go wrong, and how it's handled:**
 
 ```
+IPN never arrives (network failure)
+→ backend polls MoMo after 5 minutes
+→ frontend polls order status every 3 seconds, timeout at 15 min
+```
+
+![Payment Sequence](Diagram/Sequence/Sequence-Payment_Phase_3&4.png)
+```
 Customer closes browser before redirect fires
 → IPN arrives anyway via server-to-server
 → IPN is source of truth, not the redirect
@@ -96,19 +103,15 @@ MoMo sends the same IPN multiple times
 IPN arrives out of order (failed IPN arrives after success IPN)
 → timestamp comparison: if IPN is older than last update, discard
 → terminal state protection: confirmed status cannot be overwritten
-
-IPN never arrives (network failure)
-→ backend polls MoMo after 5 minutes
-→ frontend polls order status every 3 seconds, timeout at 15 min
-
+```
+![Sequence IPN Validation & Processing Phase 3 & 4](Diagram/sequence/Sequence-IPN_Validation_&_Processing_Phase_3&4.png)
+```
 Payment confirmed in DB but MoMo has no record
 → caught by daily reconciliation job
 → flagged as exception → accounting reviews manually
 ```
-
-![Payment Sequence](Diagram/sequence/Sequence-Payment_Phase_3&4.png)
-![Sequence IPN Validation & Processing Phase 3 & 4](Diagram/sequence/Sequence-IPN_Validation_&_Processing_Phase_3&4.png)
-
+![Sequence-Reconciliation](Diagram/sequence/Sequence-Reconciliation.png)
+```
 ---
 
 ## The Inventory Problem
