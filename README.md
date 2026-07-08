@@ -45,6 +45,7 @@ Logging them here because the reasoning matters
 more than the outcome.
 
 **Monolith vs Microservice**
+
 The first version used microservice-style sequence 
 diagrams on top of a monolith data model. That 
 doesn't hold together — you either commit to one 
@@ -55,6 +56,7 @@ justified until you have scaling problems.
 You don't solve future problems with today's budget.
 
 **Inventory Ledger vs Stock Counter**
+
 A simple `stock` column on the Product table is 
 easier to build and query. The ledger pattern 
 (append-only rows, balance = SUM) is harder but 
@@ -65,6 +67,7 @@ coming from different business lines, that
 traceability isn't optional.
 
 **Phase 3 scope cut**
+
 Vouchers, loyalty tiers, and multi-seller logic 
 were designed and then deliberately removed from 
 Phase 3. Not because they're unimportant — 
@@ -75,6 +78,7 @@ The right time to add loyalty tiers is when
 customers are loyal enough to need them.
 
 **Reconciliation buffer window**
+
 Running reconciliation at exactly midnight catches 
 payments that MoMo's IPN delivered late — 
 flagging them as missing when they're just slow. 
