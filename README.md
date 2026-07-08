@@ -38,6 +38,51 @@ So the project was restructured into phases:
 G3 is a **monolith**. Not because microservices are wrong, but because a small team at an early stage doesn't need the operational complexity. That was also a correction — an earlier version of this project modeled a monolith database while drawing microservice-style sequence diagrams. The two don't go together.
 
 ---
+## Key Trade-offs
+
+A few decisions in this project weren't obvious. 
+Logging them here because the reasoning matters 
+more than the outcome.
+
+**Monolith vs Microservice**
+The first version used microservice-style sequence 
+diagrams on top of a monolith data model. That 
+doesn't hold together — you either commit to one 
+or the other. Monolith won because: small team, 
+early-stage business, no existing ops infrastructure. 
+Microservice adds operational complexity that isn't 
+justified until you have scaling problems. 
+You don't solve future problems with today's budget.
+
+**Inventory Ledger vs Stock Counter**
+A simple `stock` column on the Product table is 
+easier to build and query. The ledger pattern 
+(append-only rows, balance = SUM) is harder but 
+gives you something the counter doesn't: you can 
+always answer "why did stock change?" 
+For a company with three sources of inventory 
+coming from different business lines, that 
+traceability isn't optional.
+
+**Phase 3 scope cut**
+Vouchers, loyalty tiers, and multi-seller logic 
+were designed and then deliberately removed from 
+Phase 3. Not because they're unimportant — 
+because building them before the retail channel 
+has volume means maintaining complexity that 
+doesn't yet earn its cost. 
+The right time to add loyalty tiers is when 
+customers are loyal enough to need them.
+
+**Reconciliation buffer window**
+Running reconciliation at exactly midnight catches 
+payments that MoMo's IPN delivered late — 
+flagging them as missing when they're just slow. 
+The 1-hour buffer trades reconciliation freshness 
+for accuracy. For a business at this stage, 
+a slightly delayed-but-correct report is better 
+than an immediate-but-noisy one.
+---
 
 ## What G3 Actually Does
 
