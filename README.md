@@ -86,6 +86,7 @@ The 1-hour buffer trades reconciliation freshness
 for accuracy. For a business at this stage, 
 a slightly delayed-but-correct report is better 
 than an immediate-but-noisy one.
+
 ---
 
 ## What G3 Actually Does
