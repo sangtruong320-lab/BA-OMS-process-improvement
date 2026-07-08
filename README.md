@@ -46,10 +46,10 @@ more than the outcome.
 
 **Monolith vs Microservice**
 
-"The first version used microservice-style sequence 
+The first version used microservice-style sequence 
 diagrams on top of a monolith data model. That 
 doesn't hold together — you either commit to one 
-or the other". Monolith won because: small team, 
+or the other. Monolith won because: small team, 
 early-stage business, no existing ops infrastructure. 
 Microservice adds operational complexity that isn't 
 justified until you have scaling problems. 
