@@ -1,0 +1,55 @@
+## Key Trade-offs
+
+**Monolith vs Microservice**
+
+_Problem:_ Need to choose architecture for OMS MVP.
+
+_Options:_
+- Microservice: good scalability, independent deployment, fault isolation
+- Monolith: simpler, less ops overhead, single database
+
+_Decision:_ Monolith.
+
+_Trade-off:_ Lose the ability to scale individual services independently. Acceptable at this stage because the retail channel does not yet have enough volume to justify the operational complexity of microservices. A common mistake is solving future problems with today’s budget.
+
+---
+
+**Inventory Ledger vs Stock Counter**
+
+_Problem:_ Need to track inventory from 3 different sources with clear history.
+
+_Options:_
+- Stock counter: one column `stock` in Product table, UPDATE on each change — simple, fast query
+- Ledger: append-only rows, balance = SUM() — more complex but provides full audit trail
+
+_Decision:_ Ledger.
+
+_Trade-off:_ Querying balance is slower than counter (requires SUM instead of reading one field). Acceptable because with a company having 3 inventory sources from 2 different business lines, the question “why did inventory change” is not optional — it’s a real accounting requirement.
+
+---
+
+**Phase 3 Scope Cut**
+
+_Problem:_ Voucher, loyalty tiers, multi-seller have been designed. Should they be included in Phase 3?
+
+_Options:_
+- Keep full scope: more complete, showcase more
+- Cut down to MVP: fewer features, but more coherent
+
+_Decision:_ Cut.
+
+_Trade-off:_ Portfolio looks smaller than the initial version. But the right feature at the right time is better than the right feature at the wrong time. Loyalty tiers only make sense when there are enough customers to require segmentation — not when the retail channel has just launched.
+
+---
+
+**Reconciliation Buffer Window**
+
+_Problem:_ Reconciliation runs at 00:00 — IPN from MoMo sometimes arrives late, mistakenly flagged as missing.
+
+_Options:_
+- No buffer: run immediately, faster reporting but many false positives
+- 1-hour buffer: ignore payments within the last hour, slower reporting but more accurate
+
+_Decision:_ 1-hour buffer.
+
+_Trade-off:_ Reconciliation does not fully cover the previous day until 01:00. Acceptable because at this stage, accurate reporting is more important than fast reporting — accounting doesn’t need numbers at midnight, they need correct numbers in the morning when work starts.
