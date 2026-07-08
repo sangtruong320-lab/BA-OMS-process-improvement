@@ -89,7 +89,6 @@ IPN never arrives (network failure)
 → backend polls MoMo after 5 minutes
 → frontend polls order status every 3 seconds, timeout at 15 min
 ```
-
 ![Payment Sequence](Diagram/Sequence/Sequence-Payment_Phase_3&4.png)
 ```
 Customer closes browser before redirect fires
@@ -104,7 +103,6 @@ IPN arrives out of order (failed IPN arrives after success IPN)
 → timestamp comparison: if IPN is older than last update, discard
 → terminal state protection: confirmed status cannot be overwritten
 ```
-
 ![Sequence IPN Validation & Processing Phase 3 & 4](Diagram/Sequence/Sequence-IPN_Validation_&_Processing_Phase_3&4.png)
 ```
 Payment confirmed in DB but MoMo has no record
